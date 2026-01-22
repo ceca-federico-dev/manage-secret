@@ -10,73 +10,42 @@ module.exports.getSecrets = async ({ resolveConfigurationProperty }) => {
   }
 
   // Read serverless.yml content manually to avoid circular dependencies during variable resolution
+  // We use js-yaml (standard dependency of Serverless) for robust parsing
   const slsContent = fs.readFileSync('serverless.yml', 'utf8');
+  let slsConfig;
 
-  // Regex to extract 'app' name
-  const appMatch = slsContent.match(/^app:\s+(.+)/m);
-  let company = appMatch ? appMatch[1].trim() : null;
+  try {
+      // Try to load js-yaml from the project's node_modules (Serverless depends on it)
+      // Since this script runs in the serverless process, require('js-yaml') should work if hoisted or if we are lucky.
+      // If not, we might need to rely on the user having it or being in the path.
+      // Common path: node_modules/js-yaml or node_modules/serverless/node_modules/js-yaml
+      try {
+          slsConfig = require('js-yaml').load(slsContent);
+      } catch (e) {
+         // If generic require fails, try to find it relative to current working dir
+         // This is a bit of a hail mary but cleaner than manual parsing if it works
+         slsConfig = require(process.cwd() + '/node_modules/js-yaml').load(slsContent);
+      }
+  } catch (e) {
+      // Fallback: If js-yaml is completely missing, we have to fail or revert to manual.
+      // Given the user request, we must error out if we can't use the library.
+      throw new Error("Could not load 'js-yaml' to parse serverless.yml. Please ensure it is installed in your project or available to Serverless: " + e.message);
+  }
 
-  // Fallback: check custom.keepass_entry
+  // Extract 'app' name
+  const company = slsConfig.app || slsConfig.custom?.keepass_entry;
+
   if (!company) {
-      const customEntryMatch = slsContent.match(/keepass_entry:\s+(.+)/);
-      if (customEntryMatch) company = customEntryMatch[1].trim();
+    throw new Error("Property 'app' or 'custom.keepass_entry' not found in serverless.yml. Needed for KeePassXC lookup.");
   }
 
-  if (!company) {
-    throw new Error("Property 'app' not found in serverless.yml (and custom.keepass_entry not found). Needed for KeePassXC lookup.");
-  }
+  // Extract 'custom.dev' block
+  // Note: We access the raw object. Variables ${...} will NOT be resolved here, which is what we want!
+  // We want the static template values.
+  const devConfig = slsConfig.custom?.dev;
 
-  // Manually parse 'custom.dev' block
-  // We look for 'custom:' start, find 'dev:' indented, and capture its children
-  // This is a naive parser that assumes standard 2-space or 4-space indentation and simple key-value pairs.
-  const devConfig = {};
-
-  const lines = slsContent.split('\n');
-  let insideCustom = false;
-  let insideDev = false;
-  let indentation = 0;
-
-  for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-
-      if (line.match(/^custom:/)) { insideCustom = true; continue; }
-      if (!insideCustom) continue;
-
-      // Check if we exited custom block (dedented)
-      if (insideCustom && !line.startsWith(' ') && !line.startsWith('\t')) {
-          insideCustom = false; insideDev = false; continue;
-      }
-
-      if (insideCustom && !insideDev && trimmed.match(/^dev:/)) {
-          insideDev = true;
-          // Capture indentation level of 'dev:'
-          indentation = line.search(/\S/);
-          continue;
-      }
-
-      if (insideDev) {
-          const currentIndent = line.search(/\S/);
-          if (currentIndent <= indentation) {
-              insideDev = false; // block ended
-          } else {
-              // Parse key: value
-              const partMatch = line.match(/^(\s*)([^:]+):\s*(.+)$/);
-              if (partMatch) {
-                  const key = partMatch[2].trim();
-                  let val = partMatch[3].trim();
-                  // Remove quotes if present
-                  if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-                      val = val.slice(1, -1);
-                  }
-                  devConfig[key] = val;
-              }
-          }
-      }
-  }
-
-  if (Object.keys(devConfig).length === 0) {
-    throw new Error("Property 'custom.dev' not found or empty in serverless.yml. Needed as a template for local.");
+  if (!devConfig) {
+    throw new Error("Property 'custom.dev' not found in serverless.yml. Needed as a template for local.");
   }
 
   const cachePath = '/tmp/serverless-keepass-cache.json.gpg';
@@ -182,6 +151,31 @@ module.exports.getSecrets = async ({ resolveConfigurationProperty }) => {
         break;
       }
     }
+  }
+
+  // --- Safety Guard ---
+  // Force safe values for local stage to prevent accidental production emissions
+  const safetyOverrides = {
+    'production': false,
+    'is_production': false,
+    'emission_enabled': false,
+    'is_test': true,
+    'stage': 'local'
+  };
+
+  const appliedOverrides = [];
+  for (const configKey in localConfig) {
+    const lowerKey = configKey.toLowerCase();
+    if (Object.prototype.hasOwnProperty.call(safetyOverrides, lowerKey)) {
+        if (localConfig[configKey] !== safetyOverrides[lowerKey]) {
+            localConfig[configKey] = safetyOverrides[lowerKey];
+            appliedOverrides.push(configKey);
+        }
+    }
+  }
+
+  if (appliedOverrides.length > 0) {
+      console.log(`🛡️  Safety Guard: Forced safe values for [${appliedOverrides.join(', ')}]`);
   }
 
   return localConfig;
