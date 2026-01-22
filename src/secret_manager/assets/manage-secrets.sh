@@ -133,10 +133,10 @@ apply_config() {
     else
         if grep -q "^custom:" "$sls_file"; then
             # Add after custom:
-            # We use sed to append after the line matching 'custom:'
-            # For macOS/BSD sed, -i '' is required.
-            sed -i '' "/^custom:/a\\
-$config_line" "$sls_file"
+            # We use a temporary file to remain cross-platform (macOS vs Linux sed differences)
+            local tmp_sls
+            tmp_sls=$(mktemp)
+            awk -v line="$config_line" '/^custom:/ { print; print line; next } { print }' "$sls_file" > "$tmp_sls" && mv "$tmp_sls" "$sls_file"
             echo "✅ Added local config to custom section in serverless.yml"
         else
             # Append custom section
