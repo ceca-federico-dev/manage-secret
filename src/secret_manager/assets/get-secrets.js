@@ -10,15 +10,15 @@ module.exports.getSecrets = async ({ resolveConfigurationProperty }) => {
   }
 
   // Try to get a custom entry name from serverless.yml, otherwise fallback to 'app'
-  const company = (await resolveConfigurationProperty(['custom', 'keepass_entry'])) || (await resolveConfigurationProperty(['app']));
+  const company = (await resolveConfigurationProperty(['custom'])) || (await resolveConfigurationProperty(['app']));
   if (!company) {
-    throw new Error("Property 'app' or 'custom.keepass_entry' not found in serverless.yml. Needed for KeePassXC lookup.");
+    throw new Error("Property 'app' not found in serverless.yml. Needed for KeePassXC lookup.");
   }
 
-  // Get the prod configuration to use as a template for local
-  const prodConfig = await resolveConfigurationProperty(['custom', 'prod']);
-  if (!prodConfig) {
-    throw new Error("Property 'custom.prod' not found in serverless.yml. Needed as a template for local.");
+  // Get the dev configuration to use as a template for local
+  const devConfig = await resolveConfigurationProperty(['custom', 'dev']);
+  if (!devConfig) {
+    throw new Error("Property 'custom.dev' not found in serverless.yml. Needed as a template for local.");
   }
 
   const cachePath = '/tmp/serverless-keepass-cache.json.gpg';
@@ -111,9 +111,9 @@ module.exports.getSecrets = async ({ resolveConfigurationProperty }) => {
       }
   }
 
-  // Create the local config by merging prod template with KeePassXC secrets
-  // This ensures custom.local has all keys from custom.prod
-  const localConfig = { ...prodConfig };
+  // Create the local config by merging dev template with KeePassXC secrets
+  // This ensures custom.local has all keys from custom.dev
+  const localConfig = { ...devConfig };
 
   // Replace placeholders with real secrets (case-insensitive key matching)
   for (const secretKey in secrets) {
