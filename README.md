@@ -77,10 +77,23 @@ custom:
 
 ### 🧠 What is `get-secrets.js`?
 It is a simple **middleware** that connects Serverless to your local KeePassXC vault.
-*   **Encrypted Cache**: It caches secrets in `/tmp/serverless-keepass-cache.json.gpg`. The file is encrypted using your own GPG key, so it's never stored in plain text.
-*   **Auto-Expiry**: The cache has a strictly enforced 1-hour lifespan. After 1 hour, the file is automatically deleted.
-*   **Smart**: It automatically matches keys from your vault to the keys in your `serverless.yml` configuration (case-insensitive).
-*   **Zero-Config**: It automatically detects your GPG identity to encrypt the cache for you.
+
+### 🔒 Security & Caching (The new stuff)
+
+To balance **security** and **developer experience**, we've implemented the following:
+
+1.  **Encrypted Local Cache**: Instead of plain text, secrets are cached in `/tmp/serverless-keepass-cache.json.gpg`.
+    *   The file is encrypted using **your own GPG key**.
+    *   Only you (the owner of the GPG private key) can decrypt this file.
+    *   Even if someone gets access to your `/tmp` directory, they cannot read your credentials.
+2.  **Hard 1-Hour Expiration**: The cache is strictly valid for 1 hour.
+    *   The script checks the file's modification time. If it's older than 60 minutes, it is **deleted and ignored**.
+    *   This forces a re-authentication with KeePassXC to ensure your vault is still unlocked and you are present.
+3.  **Zero-Configuration Encryption**:
+    *   The script automatically detects your active GPG secret keys to select a recipient.
+    *   No manual GPG configuration is needed at the repository level.
+4.  **Automatic Key Matching**:
+    *   It automatically matches keys from your vault to the keys in your `serverless.yml` configuration (case-insensitive).
 
 ### Daily Usage:
 ```bash
@@ -88,7 +101,7 @@ npm start
 # OR manually:
 sls offline --stage local
 ```
-*You will be prompted for your KeePassXC master password once in the terminal.*
+*You will be prompted for your KeePassXC master password (first time) and your GPG passphrase (if not cached by your gpg-agent).*
 
 ## 🔒 Security Details
 
