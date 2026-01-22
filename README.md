@@ -45,7 +45,7 @@ secret-ls # Or ./manage-secrets.sh ls
 
 ### 3. Apply Configuration to Project
 ```bash
-secret-apply ./serverless.yml
+secret-apply <path-to-project>/serverless.yml
 ```
 
 ## ⚡️ Serverless Direct Integration (Local Dev Only)
@@ -57,7 +57,7 @@ To avoid hardcoding secrets even in gitignored files, we use a JS helper that pu
 Instead of manually copying files and editing configs, simply run:
 
 ```bash
-secret-apply ./serverless.yml
+secret-apply <path-to-project>/serverless.yml
 ```
 
 This command will automatically:
