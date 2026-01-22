@@ -67,7 +67,7 @@ module.exports.getSecrets = async ({ resolveConfigurationProperty }) => {
   }
 
   if (!secrets) {
-      console.log(`\n🔒 Fetching secrets for '${company}' from KeePassXC...`);
+      console.log(`\n🔒 Fetching secrets for '${company}' from KeePassXC (Password required)...`);
 
       try {
         // This will trigger the KeePassXC password prompt in the terminal
