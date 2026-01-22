@@ -21,18 +21,51 @@ module.exports.getSecrets = async ({ resolveConfigurationProperty }) => {
     throw new Error("Property 'custom.prod' not found in serverless.yml. Needed as a template for local.");
   }
 
-  const cachePath = '/tmp/serverless-keepass-cache.json';
+  const cachePath = '/tmp/serverless-keepass-cache.json.gpg';
+  const legacyCachePath = '/tmp/serverless-keepass-cache.json';
   const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
+  // Cleanup legacy plain text cache
+  if (fs.existsSync(legacyCachePath)) {
+      try { fs.unlinkSync(legacyCachePath); } catch (e) {}
+  }
+
   let secrets = null;
+
+  // Helper to get GPG Recipient
+  const getGpgRecipient = () => {
+    try {
+      const output = execSync('gpg --list-secret-keys --with-colons', { encoding: 'utf-8' });
+      const fprLine = output.split('\n').find(line => line.startsWith('fpr:'));
+      return fprLine ? fprLine.split(':')[9] : null;
+    } catch (e) {
+      return null;
+    }
+  };
+
+  const gpgRecipient = getGpgRecipient();
+  if (!gpgRecipient) {
+      console.warn("⚠️  No GPG secret keys found. Cache encryption will be skipped (using plain text if available).");
+  }
 
   // Try to load from cache
   if (fs.existsSync(cachePath)) {
       try {
-          const cacheData = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
-          if (cacheData[company] && cacheData[company].timestamp && (Date.now() - cacheData[company].timestamp < CACHE_TTL_MS)) {
-              secrets = cacheData[company].data;
-              console.log(`⚡ Loaded secrets for '${company}' from cache.`);
+          // Check file age (hard expiration)
+          const stats = fs.statSync(cachePath);
+          if (Date.now() - stats.mtimeMs > CACHE_TTL_MS) {
+              fs.unlinkSync(cachePath);
+              console.log("⏰ Cache expired and deleted.");
+          } else if (gpgRecipient) {
+              const decrypted = execSync(`gpg --quiet --decrypt "${cachePath}"`, {
+                  stdio: ['inherit', 'pipe', 'inherit'],
+                  encoding: 'utf-8'
+              });
+              const cacheData = JSON.parse(decrypted);
+              if (cacheData[company] && cacheData[company].timestamp && (Date.now() - cacheData[company].timestamp < CACHE_TTL_MS)) {
+                  secrets = cacheData[company].data;
+                  console.log(`⚡ Loaded secrets for '${company}' from encrypted cache.`);
+              }
           }
       } catch (e) {
           // ignore cache read errors
@@ -57,16 +90,27 @@ module.exports.getSecrets = async ({ resolveConfigurationProperty }) => {
 
         // Update cache
         let cacheData = {};
-        if (fs.existsSync(cachePath)) {
+        if (fs.existsSync(cachePath) && gpgRecipient) {
             try {
-                cacheData = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
+                const decrypted = execSync(`gpg --quiet --decrypt "${cachePath}"`, {
+                    stdio: ['inherit', 'pipe', 'inherit'],
+                    encoding: 'utf-8'
+                });
+                cacheData = JSON.parse(decrypted);
             } catch (e) { /* ignore corrupt cache */ }
         }
+
         cacheData[company] = {
             timestamp: Date.now(),
             data: secrets
         };
-        fs.writeFileSync(cachePath, JSON.stringify(cacheData, null, 2));
+
+        if (gpgRecipient) {
+            execSync(`gpg --quiet --encrypt --recipient "${gpgRecipient}" --output "${cachePath}" --yes`, {
+                input: JSON.stringify(cacheData),
+                encoding: 'utf-8'
+            });
+        }
 
       } catch (error) {
         throw new Error(`Failed to fetch secrets from KeePassXC: ${error.message}`);

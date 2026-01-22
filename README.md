@@ -77,9 +77,10 @@ custom:
 
 ### 🧠 What is `get-secrets.js`?
 It is a simple **middleware** that connects Serverless to your local KeePassXC vault.
-*   **Safe**: It does not store secrets in files. It keeps them in memory only during the process execution.
+*   **Encrypted Cache**: It caches secrets in `/tmp/serverless-keepass-cache.json.gpg`. The file is encrypted using your own GPG key, so it's never stored in plain text.
+*   **Auto-Expiry**: The cache has a strictly enforced 1-hour lifespan. After 1 hour, the file is automatically deleted.
 *   **Smart**: It automatically matches keys from your vault to the keys in your `serverless.yml` configuration (case-insensitive).
-*   **Cached**: It caches secrets in `/tmp/` for 1 hour to avoid asking for your password on every reload.
+*   **Zero-Config**: It automatically detects your GPG identity to encrypt the cache for you.
 
 ### Daily Usage:
 ```bash
