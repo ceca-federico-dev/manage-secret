@@ -43,39 +43,37 @@ secret-add company-name access.json
 secret-ls # Or ./manage-secrets.sh ls
 ```
 
+### 3. Apply Configuration to Project
+```bash
+secret-apply ./serverless.yml
+```
+
 ## ⚡️ Serverless Direct Integration (Local Dev Only)
 
 To avoid hardcoding secrets even in gitignored files, we use a JS helper that pulls secrets directly from KeePassXC into memory when running Serverless locally.
 
-### How to set up a new Repository:
+### Automated Setup with `secret-apply`:
 
-1. **Add the Helper**: Copy `get-secrets.js` to the root of your repository. This file is safe to commit as it contains no sensitive data.
-2. **Update `serverless.yml`**: Configure the `custom` block to include a `local` environment.
-    *   **template**: This defines which environment's configuration should be used as a base (e.g., `dev` or `prod`). The script will copy this config and override matching keys with secrets from the vault.
-    *   **keepass_entry** (Optional): If your KeePassXC entry name differs from the `app` name in serverless.yml, specify it here.
+Instead of manually copying files and editing configs, simply run:
 
+```bash
+secret-apply ./serverless.yml
+```
+
+This command will automatically:
+1.  **Copy** the `get-secrets.js` helper to your project root.
+2.  **Configure** `serverless.yml` injecting the `local: ${file(./get-secrets.js):getSecrets}` line.
+3.  **Update** `package.json` scripts to append `--stage local` to any serverless command.
+
+### Manual Setup (If preferred):
+
+1. **Add the Helper**: Copy `get-secrets.js` to the root of your repository.
+2. **Update `serverless.yml`**: Configure the `custom` block:
 ```yaml
 custom:
-  # ... other env configs (dev, prod) ...
   local: ${file(./get-secrets.js):getSecrets}
 ```
-
-### How it works:
-
-1. **Dynamic Lookup**: When you run `sls offline --stage local`, Serverless calls `getSecrets`.
-2. **Auto-Discovery**: The helper reads the `app` name from your `serverless.yml` and uses it to find the correct entry in KeePassXC.
-3. **Smart Merge**: It takes your `custom.prod` configuration as a template and replaces only the keys found in your vault with real values.
-4. **No Files**: Secrets are injected into memory. No flat JSON files are ever created on disk.
-
-### 3. Update `package.json` (Recommended)
-Add a script to easily run offline mode with the `local` stage. This ensures the secrets helper is triggered.
-
-```json
-"scripts": {
-  "start": "sls offline start --stage local",
-  "test:quotation": "sls invoke local -f GetQuotation -p events/event-quotation.json --stage local"
-}
-```
+3. **Update `package.json`**: Add `--stage local` to your start scripts.
 
 ### 🧠 What is `get-secrets.js`?
 It is a simple **middleware** that connects Serverless to your local KeePassXC vault.

@@ -86,7 +86,8 @@ def configure_shell(install_path):
         f'\n# Secret Manager Configuration',
         f'export SECRETS_MANAGER_PATH="{install_path}/manage-secrets.sh"',
         'alias secret-add=\'$SECRETS_MANAGER_PATH add\'',
-        'alias secret-ls=\'$SECRETS_MANAGER_PATH ls\''
+        'alias secret-ls=\'$SECRETS_MANAGER_PATH ls\'',
+        'alias secret-apply=\'$SECRETS_MANAGER_PATH apply\''
     ]
 
     # Check if already exists to avoid duplication
