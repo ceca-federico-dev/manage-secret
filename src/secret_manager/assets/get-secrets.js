@@ -9,16 +9,74 @@ module.exports.getSecrets = async ({ resolveConfigurationProperty }) => {
     throw new Error("SECRETS_MANAGER_PATH environment variable not found. Please check your .zshrc and run 'source ~/.zshrc'");
   }
 
-  // Try to get a custom entry name from serverless.yml, otherwise fallback to 'app'
-  const company = (await resolveConfigurationProperty(['custom', 'keepass_entry'])) || (await resolveConfigurationProperty(['app']));
+  // Read serverless.yml content manually to avoid circular dependencies during variable resolution
+  const slsContent = fs.readFileSync('serverless.yml', 'utf8');
+
+  // Regex to extract 'app' name
+  const appMatch = slsContent.match(/^app:\s+(.+)/m);
+  let company = appMatch ? appMatch[1].trim() : null;
+
+  // Fallback: check custom.keepass_entry
   if (!company) {
-    throw new Error("Property 'app' or 'custom.keepass_entry' not found in serverless.yml. Needed for KeePassXC lookup.");
+      const customEntryMatch = slsContent.match(/keepass_entry:\s+(.+)/);
+      if (customEntryMatch) company = customEntryMatch[1].trim();
   }
 
-  // Get the dev configuration to use as a template for local
-  const devConfig = await resolveConfigurationProperty(['custom', 'dev']);
-  if (!devConfig) {
-    throw new Error("Property 'custom.dev' not found in serverless.yml. Needed as a template for local.");
+  if (!company) {
+    throw new Error("Property 'app' not found in serverless.yml (and custom.keepass_entry not found). Needed for KeePassXC lookup.");
+  }
+
+  // Manually parse 'custom.dev' block
+  // We look for 'custom:' start, find 'dev:' indented, and capture its children
+  // This is a naive parser that assumes standard 2-space or 4-space indentation and simple key-value pairs.
+  const devConfig = {};
+
+  const lines = slsContent.split('\n');
+  let insideCustom = false;
+  let insideDev = false;
+  let indentation = 0;
+
+  for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+
+      if (line.match(/^custom:/)) { insideCustom = true; continue; }
+      if (!insideCustom) continue;
+
+      // Check if we exited custom block (dedented)
+      if (insideCustom && !line.startsWith(' ') && !line.startsWith('\t')) {
+          insideCustom = false; insideDev = false; continue;
+      }
+
+      if (insideCustom && !insideDev && trimmed.match(/^dev:/)) {
+          insideDev = true;
+          // Capture indentation level of 'dev:'
+          indentation = line.search(/\S/);
+          continue;
+      }
+
+      if (insideDev) {
+          const currentIndent = line.search(/\S/);
+          if (currentIndent <= indentation) {
+              insideDev = false; // block ended
+          } else {
+              // Parse key: value
+              const partMatch = line.match(/^(\s*)([^:]+):\s*(.+)$/);
+              if (partMatch) {
+                  const key = partMatch[2].trim();
+                  let val = partMatch[3].trim();
+                  // Remove quotes if present
+                  if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+                      val = val.slice(1, -1);
+                  }
+                  devConfig[key] = val;
+              }
+          }
+      }
+  }
+
+  if (Object.keys(devConfig).length === 0) {
+    throw new Error("Property 'custom.dev' not found or empty in serverless.yml. Needed as a template for local.");
   }
 
   const cachePath = '/tmp/serverless-keepass-cache.json.gpg';
@@ -111,9 +169,9 @@ module.exports.getSecrets = async ({ resolveConfigurationProperty }) => {
       }
   }
 
-  // Create the local config by merging prod template with KeePassXC secrets
-  // This ensures custom.local has all keys from custom.prod
-  const localConfig = { ...prodConfig };
+  // Create the local config by merging dev template with KeePassXC secrets
+  // This ensures custom.local has all keys from custom.dev
+  const localConfig = { ...devConfig };
 
   // Replace placeholders with real secrets (case-insensitive key matching)
   for (const secretKey in secrets) {
