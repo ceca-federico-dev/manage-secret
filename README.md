@@ -89,9 +89,7 @@ To balance **security** and **developer experience**, we've implemented the foll
 2.  **Hard 1-Hour Expiration**: The cache is strictly valid for 1 hour.
     *   The script checks the file's modification time. If it's older than 60 minutes, it is **deleted and ignored**.
     *   This forces a re-authentication with KeePassXC to ensure your vault is still unlocked and you are present.
-3.  **Zero-Configuration Encryption**:
-    *   The script automatically detects your active GPG secret keys to select a recipient.
-    *   No manual GPG configuration is needed at the repository level.
+3.  **Safety First**: The script uses **`custom.dev`** as the base template for the local environment. This prevents accidental use of production configurations.
 4.  **Automatic Key Matching**:
     *   It automatically matches keys from your vault to the keys in your `serverless.yml` configuration (case-insensitive).
 
