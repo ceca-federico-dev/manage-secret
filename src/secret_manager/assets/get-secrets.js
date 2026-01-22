@@ -22,13 +22,7 @@ module.exports.getSecrets = async ({ resolveConfigurationProperty }) => {
   }
 
   const cachePath = '/tmp/serverless-keepass-cache.json.gpg';
-  const legacyCachePath = '/tmp/serverless-keepass-cache.json';
   const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
-
-  // Cleanup legacy plain text cache
-  if (fs.existsSync(legacyCachePath)) {
-      try { fs.unlinkSync(legacyCachePath); } catch (e) {}
-  }
 
   let secrets = null;
 
@@ -45,7 +39,7 @@ module.exports.getSecrets = async ({ resolveConfigurationProperty }) => {
 
   const gpgRecipient = getGpgRecipient();
   if (!gpgRecipient) {
-      console.warn("⚠️  No GPG secret keys found. Cache encryption will be skipped (using plain text if available).");
+      throw new Error("❌ GPG recipient not found. An encrypted cache is required for security. Please ensure you have a GPG secret key configured.");
   }
 
   // Try to load from cache
