@@ -65,6 +65,11 @@ This command will automatically:
 2.  **Configure** `serverless.yml` injecting the `local: ${file(./get-secrets.js):getSecrets}` line.
 3.  **Update** `package.json` scripts to append `--stage local` to any serverless command.
 
+> [!IMPORTANT]
+> **URL & Secret Consistency**: Since we use **`custom.dev`** as a base template but inject **Production Secrets** from KeePassXC, you must ensure that the URLs in your `local` environment are compatible with those secrets.
+>
+> If your `custom.dev` points to development endpoints but you inject production API keys, the connection will fail. **Make sure to manually override or verify the URLs for the `local` stage if they differ significantly from production.**
+
 ### Manual Setup (If preferred):
 
 1. **Add the Helper**: Copy `get-secrets.js` to the root of your repository.
